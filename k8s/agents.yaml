@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sre-agent-sa
+  namespace: sre-ai
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sre-agent-readonly
+  namespace: sre-ai
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sre-agent-readonly-bind
+  namespace: sre-ai
+subjects:
+  - kind: ServiceAccount
+    name: sre-agent-sa
+    namespace: sre-ai
+roleRef:
+  kind: Role
+  name: sre-agent-readonly
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sre-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: sre-agent }
+  template:
+    metadata:
+      labels: { app: sre-agent }
+    spec:
+      serviceAccountName: sre-agent-sa
+      containers:
+        - name: sre-agent
+          image: sre-agent:1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: OLLAMA_URL
+              value: "http://ollama:11434"
+            - name: MODEL
+              value: "llama3.2:1b"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sre-agent-svc
+spec:
+  selector: { app: sre-agent }
+  ports:
+    - port: 80
+      targetPort: 8080
+  type: ClusterIP
